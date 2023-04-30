@@ -1,25 +1,172 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
----
+# Reproducible Research: Course Project 01
+### Jane Nyandele
+### April 30, 2023
+
+# Introduction
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a Fitbit, and Nike Fuelband. These type of devices are part of the “quantified self” movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
+
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals throughout the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+The data for this assignment can be downloaded from the course web site:
+
+* Dataset: [Activity monitoring data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip) [52K]
+
+The variables included in this dataset are:
+
+* **steps**: Number of steps taking in a 5-minute interval (missing values are coded as NA)
+
+* **date**: The date on which the measurement was taken in YYYY-MM-DD format
+
+* **interval**: Identifier for the 5-minute interval in which measurement was taken
+
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
 
 
-## Loading and preprocessing the data
+### Downloading, loading and pre-processing the data
+```{r}
+#Download the data
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+download.file(url, "repdata_activity.zip")
+unzip("repdata_activity.zip")
 
+#Load the data into R
+activity <- read.csv("activity.csv", sep = ",", header = TRUE)
 
+#Inspect the data
+head(activity)
+```
+```{r}
+str(activity)
+```
 
-## What is mean total number of steps taken per day?
+Transform the data variables so that they are easier to manipulate
+```{r}
+#transform the steps, interval and date variables to numeric and date format respectively
+activity$steps <- as.numeric(activity$steps)
+activity$interval <- as.numeric(activity$interval)
+activity$date <- as.Date(activity$date)
+str(activity)
+```
 
+## ANALYSIS
 
+### Question 01: What is the mean total number of steps taken per day?
+1. Calculate the total number of steps taken per day
+```{r}
+library(dplyr)
+stepsPerDay <- activity %>% 
+  group_by(date) %>% 
+  summarise(sumsteps = sum(steps, na.rm = TRUE))
+```
 
-## What is the average daily activity pattern?
+2. Make a histogram of total number of steps taken each day
+```{r}
+hist(stepsPerDay$sumsteps, col = "pink", main = "Total Number of Steps Per Day",
+     xlab = "Steps per Day", ylab = "Frequency", ylim = c(0, 30), breaks = 7)
+```
 
+3. Calculate the mean and median of total number of steps taken per day
+```{r}
+meanWithNA <- round(mean(stepsPerDay$sumsteps))
+medianWithNA <- round(median(stepsPerDay$sumsteps))
 
+print(paste("The mean is: ", meanWithNA))
+print(paste("The median is: ", medianWithNA))
+```
 
-## Imputing missing values
+### Question 02: What is the average daily activity pattern? 
+1. Make a time series plot of the 5-minute interval (x axis), and the average number of steps taken, averaged across all days (y axis)
+```{r}
+stepsPerInteval <- activity %>% 
+  group_by(interval) %>% 
+  summarise(meansteps = mean(steps, na.rm = TRUE))
 
+plot(stepsPerInteval$meansteps ~ stepsPerInteval$interval, type = "l", col = "purple", 
+     xlab = "5 Minute Interval", ylab = "Average Number of Steps", main = "Steps By Time Interval")
+```
 
+2. Which 5-minute interval, on average across all days in the data set, contains the maximum number of steps?
+```{r}
+intervalWithMaxSteps <- stepsPerInteval$interval[which.max(stepsPerInteval$meansteps)]
+print(paste("The 5-minute interval that contains the maximum number of steps is ", intervalWithMaxSteps))
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+### Question 03: Imputing Missing Values
+
+1. Calculate and report the total number of missing values in the dataset
+```{r}
+missingValues <- sum(is.na(activity$steps))
+print(paste("The total number of missing values in the dataset is ", missingValues))
+```
+
+2. Devise a strategy for filling in all missing values. (use the mean number of steps per day)
+```{r, warning=FALSE}
+activityNoNA <- activity # This creates a new dataset equivalent to the original one, but with the new data filled in
+for (i in 1:nrow(activity)) {
+  if (is.na(activity$steps[i])) {
+    activityNoNA$steps[i] <- stepsPerInteval$meansteps[activityNoNA$interval == stepsPerInteval$interval]
+  }
+}
+
+# get a small view of the new dataset that does not have the missing values
+head(activityNoNA, 10)
+```
+3a. Make a histogram of the total number of steps taken each day. Report the mean and median of the total steps taken per day. 
+```{r}
+stepsPerDayNoNA <- activityNoNA %>% 
+  group_by(date) %>% 
+  summarise(sumsteps = sum(steps, na.rm = TRUE))
+
+hist(stepsPerDayNoNA$sumsteps, col = "blue", main = "Total Number of Steps Per Day",
+     xlab = "Steps per Day", ylab = "Frequency", ylim = c(0, 30), breaks = 5)
+```
+
+3b. Calculate and report the mean and median of the total steps taken per day
+```{r}
+meanNoNA <- round(mean(stepsPerDayNoNA$sumsteps))
+medianNoNA <- round(median(stepsPerDayNoNA$sumsteps))
+
+print(paste("The mean is: ", meanNoNA))
+print(paste("The median is: ", medianNoNA))
+```
+
+```{r}
+#Compare the mean and median before and after imputation
+NACompare <- data.frame(mean = c(meanWithNA, meanNoNA), median = c(medianWithNA, medianNoNA))
+rownames(NACompare) <- c("Before NA Transformation", "After NA Transformation")
+print(NACompare)
+```
+
+### Question 04: Are there differences in activity patterns between weekdays and weekends?
+1. Create a new factor variable in the dataset with two levels: "weekday" and "weekend" indicating wheather a given day is a weekday or weekend
+```{r}
+activityDay <- activityNoNA
+activityDay$date <- as.Date(activityDay$date)
+activityDay$day <- ifelse(weekdays(activityDay$date) %in% c("Saturday", "Sunday"), "weekend", "weekday")
+activityDay$day <- as.factor(activityDay$day)
+```
+
+2. Make a panel plot containing a time series plot of the 5 minute interval (x axis) and the average number of steps taken, averaged across all weekdays or weekends
+
+```{r}
+par(mfrow = c(2,1))
+
+#plot 01
+Weekdays <- activityDay[activityDay$day == "weekday",]
+WeekdaysMeanSteps <- Weekdays %>% 
+  group_by(interval) %>% 
+  summarise(meansteps = mean(steps))
+
+plot(WeekdaysMeanSteps$meansteps ~ WeekdaysMeanSteps$interval, type = "l", main = "Steps by Time Interval - Weekdays", xlab = "5 Minute Interval", ylab = "Average Number of Steps", col = "Black", ylim = c(0, 200))
+
+#plot 02
+Weekend <- activityDay[activityDay$day == "weekend",]
+WeekendMeanSteps <- Weekend %>% 
+  group_by(interval) %>% 
+  summarise(meansteps = mean(steps))
+
+plot(WeekendMeanSteps$meansteps ~ WeekendMeanSteps$interval, type = "l", main = "Steps by Time Interval - Weekends", xlab = "5 Minute Interval", ylab = "Average Number of Steps", col = "Black", ylim = c(0, 200))
+
+```
+
+**Conclusion**: The activity pattern differs slightly between weekdays and weekends. The slightly higher spike on weekdays may correspond to the commutes the individual took to work/school. The pattern of the number of steps on weekends remained more or less consistent.
